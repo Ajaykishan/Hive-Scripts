@@ -1,0 +1,519 @@
+﻿#-----------------------------------------------------
+#Create,Describe,Drop and Alter Database/Properties:
+#-----------------------------------------------------
+CREATE DATABASE imdb10;
+CREATE DATABASE IF NOT EXISTS imdb;
+SHOW DATABASES;
+SHOW DATABASES LIKE 'i.*';
+
+#----------------------------------------------------------
+#You can also use the keyword  SCHEMA instead of  DATABASE:
+#----------------------------------------------------------
+CREATE schema imdb1;
+CREATE schema IF NOT EXISTS imdb1;
+#ILLEGAL    SHOW schema; 
+#ILLEGAL    SHOW schema LIKE 'i.*'; 
+
+CREATE DATABASE imdb LOCATION '/user/cloudera';
+CREATE DATABASE imdb COMMENT 'Holds all movie tables';
+CREATE DATABASE imdb WITH DBPROPERTIES ('creator' = 'Ajay', 'date' = '2014-09-16');
+
+DESCRIBE DATABASE imdb;
+DESCRIBE DATABASE EXTENDED imdb;
+USE imdb;
+
+DROP DATABASE IF EXISTS imdb CASCADE;
+set hive.cli.print.current.db=true;
+set hive.cli.print.current.db=false;
+
+ALTER DATABASE imdb SET DBPROPERTIES ('creator' = 'Sam');
+DESCRIBE DATABASE EXTENDED imdb;
+ALTER DATABASE imdb SET DBPROPERTIES ('Edited' = 'Ajay');
+
+Use imdb;
+
+#--------------------------------------------------------------------------------------
+#Create Table,setting Properties,Locations and Copying the schema into different table
+#--------------------------------------------------------------------------------------
+CREATE DATABASE imdb WITH DBPROPERTIES ('creator' = 'Ajay', 'date' = '2014-09-16');
+DROP TABLE movies;
+DROP TABLE ratings;
+DROP TABLE IF EXISTS user;
+
+CREATE TABLE IF NOT EXISTS imdb.ratings (
+userid INT COMMENT 'USER ID',
+movieid INT COMMENT 'Movie ID',
+rating INT COMMENT 'Rating',
+timestamp TIMESTAMP COMMENT 'Rated time'
+);
+
+CREATE TABLE IF NOT EXISTS imdb.user (
+userid INT COMMENT 'USER ID',
+Gender CHAR(1) COMMENT 'User Gender',
+Age INT COMMENT 'User Age',
+Occupation INT COMMENT 'USER OCCUPATION',
+Zipcode INT COMMENT 'User Zip-code'
+);
+
+#Dont use zip-code - Avoid "Hypen" between column names;
+
+CREATE TABLE IF NOT EXISTS movies ( movieid INT COMMENT 'Movie ID', title STRING COMMENT 'Movie Title', genres STRING COMMENT 'Movie Genre')
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '::'
+STORED AS TEXTFILE
+TBLPROPERTIES ('creator'='Ajay','created_at'='Chicago');
+LOAD DATA INPATH '/user/cloudera/movies.dat' INTO TABLE movies;
+
+CREATE TABLE create_select_movies STORED AS RCFile
+AS SELECT movieid,title,genres FROM movies SORT BY movieid;
+
+describe create_select_movies;
+describe movies;
+select * from create_select_movies;
+select * from movies;
+
+#-------------------------------------
+#Imports schema and data to new table.
+#-------------------------------------
+
+
+
+SHOW TBLPROPERTIES user;
+SHOW TBLPROPERTIES ratings;
+SHOW TBLPROPERTIES movies;
+
+
+CREATE TABLE IF NOT EXISTS movies_copy LIKE mydb.employees LOCATION '/user/cloudera';
+
+SHOW TABLES IN imdb;
+
+SHOW TABLES 'mov.*';
+
+DESCRIBE EXTENDED imdb.movies;
+DESCRIBE FORMATTED imdb.movies;
+DESCRIBE movies.movieid;
+
+#--------------
+#External TABLE
+#--------------
+CREATE EXTERNAL TABLE IF NOT EXISTS sample_external_table  ( TinyIntExample TINYINT, SmallIntExample SMALLINT, IntExample INT) 
+ROW FORMAT DELIMITED 
+FIELDS TERMINATED BY ','
+LOCATION '/user/cloudera';
+
+DESCRIBE EXTENDED sample_external_table;
+DESCRIBE Formatted sample_external_table;
+
+CREATE EXTERNAL TABLE IF NOT EXISTS imdb.copy_sample_external_table LIKE default.sample_external_table LOCATION '/user/cloudera';
+drop table copy_sample_external_table;
+
+
+#-------------
+#Partitioning 
+#-------------
+#STATIC PARTITION:
+
+CREATE TABLE IF NOT EXISTS imdb.user_copy (
+userid INT COMMENT 'USER ID',
+Gender CHAR(1) COMMENT 'User Gender',
+Age INT COMMENT 'User Age',
+Occupation INT COMMENT 'USER OCCUPATION',
+Zipcode INT COMMENT 'User Zip-code'
+)
+PARTITIONED BY ( Zipcode INT, Gender CHAR(1) );
+FAILED: SemanticException [Error 10035]: Column repeated in partitioning columns
+
+CREATE TABLE IF NOT EXISTS imdb.user_copy ( 
+userid INT COMMENT 'USER ID', 
+Age INT COMMENT 'User Age',
+Occupation INT COMMENT 'USER OCCUPATION'
+)
+PARTITIONED BY ( Zipcode INT, Age INT );
+FAILED: SemanticException [Error 10035]: Column repeated in partitioning columns
+
+The partition column is automatically included as part of the table definition, and hence can be used like any other column.
+So you can issue queries like SELECT c1, c2, c3 from callback_parts WHERE c2='foo'; for table defined as follows:
+
+create table callbacks_part
+(
+ c1 INT,
+ c3 STRING
+)
+PARTITIONED BY(c2 STRING)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+CREATE TABLE IF NOT EXISTS imdb.user_copy ( 
+userid INT COMMENT 'USER ID', 
+Age INT COMMENT 'User Age',
+Occupation INT COMMENT 'USER OCCUPATION'
+)
+PARTITIONED BY ( Zipcode INT, Gender CHAR(1) );
+
+
+CREATE TABLE collection_example1 ( 
+ArrayExample ARRAY<STRING>,
+MapExample  MAP<STRING,INT>,
+StructExample  STRUCT< Name:String, medals:int, Country:String> ,
+UnionExample UNIONTYPE<INT,DECIMAL(4,2),STRING> 
+)
+PARTITIONED BY ( Priority INT, Country String);
+
+CREATE TABLE employees (
+name  STRING,
+salary  FLOAT,
+subordinates ARRAY<STRING>,
+deductions  MAP<STRING, FLOAT>,
+address  STRUCT<street:STRING, city:STRING, state:STRING, zip:INT>
+)
+PARTITIONED BY (country STRING, state STRING);
+
+But partition columns can contain property names inside a struct, like country and state in these two examples. They are treated different.
+Describe Formatted employees;
+Describe Formatted collection_example1;
+
+set hive.mapred.mode=strict;
+select * from employees;
+select * from employees where salary > 2000;
+
+select * from employees where country = 'US';
+
+When using Hive in strict mode, including the partition column in where clause is mandatory.
+set hive.mapred.mode=nonstrict;
+
+DROP TABLE employees;
+
+CREATE TABLE employees (
+name  STRING,
+salary  FLOAT,
+subordinates ARRAY<STRING>,
+deductions  MAP<STRING, FLOAT>,
+address  STRUCT<street:STRING, city:STRING, state:STRING, zip:INT>
+)
+PARTITIONED BY (country STRING, state STRING)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '|'
+COLLECTION ITEMS TERMINATED BY '!'
+MAP KEYS TERMINATED BY '#'
+LINES TERMINATED BY '\n'
+STORED AS TEXTFILE;
+
+#One cannot load directly to a partitioned folder using 
+load data local inpath '/home/cloudera/Desktop/chapter2_partition.txt' into table employees; 
+#because employees are partitioned and the above syntax needs to be 
+
+LOAD DATA LOCAL INPATH '/home/cloudera/Desktop/chapter2_partition.txt' INTO TABLE employees PARTITION (country = 'US', state = 'IL');
+SHOW PARTITIONS employees PARTITION(country='US', state='IL');
+Select * from employees; 
+Select * from employees where state='IL';
+
+load data LOCAL inpath '/home/cloudera/Desktop/chapter2_partition.txt' into table employees  PARTITION (country = 'US', state = 'CA');
+SHOW PARTITIONS employees PARTITION(country='US', state='CA');
+Select * from employees; 
+Select * from employees where state='CA';
+
+load data LOCAL inpath '/home/cloudera/Desktop/chapter2_partition.txt' into table employees  PARTITION (country = 'UK', state = 'CA');
+SHOW PARTITIONS employees PARTITION(country='UK', state='CA');
+Select * from employees; 
+Select * from employees where state='CA';
+Select * from employees where COUNTRY='UK';
+
+SHOW PARTITIONS employees;
+SHOW PARTITIONS employees PARTITION(country='US');
+SHOW PARTITIONS employees PARTITION(country='US', state='CA');
+
+DESCRIBE Formatted employees;
+
+#----------------------------
+#DYNAMIC Partitioned tables:
+#----------------------------
+CREATE TABLE IF NOT EXISTS dynamic_partition_1 (
+userid INT COMMENT 'USER ID',
+Gender CHAR(1) COMMENT 'User Gender',
+Age INT COMMENT 'User Age',
+COUNTRY String COMMENT 'User Country'
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '|'
+LINES TERMINATED BY '\n'
+STORED AS TEXTFILE;
+
+load data local inpath '/home/cloudera/Desktop/Chapter2_DynamicPartition.txt' into table dynamic_partition_1'; 
+
+CREATE TABLE IF NOT EXISTS dynamic_partition_2 (
+userid INT COMMENT 'USER ID',
+Gender CHAR(1) COMMENT 'User Gender'
+)
+PARTITIONED BY (country STRING, Age Int)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '|'
+LINES TERMINATED BY '\n'
+STORED AS TEXTFILE;
+
+SET hive.exec.dynamic.partition = true;
+SET hive.exec.dynamic.partition.mode = nonstrict;
+INSERT OVERWRITE TABLE dynamic_partition_2 PARTITION(Country, Age) SELECT userid,Gender,Country,age from dynamic_partition_1; 
+
+This command also inserts value into dynamic partition table. Its less useful since it scans scans the entire table but reduces overhead upon user
+to code the partition column at the last of select command. 
+INSERT INTO table dynamic_partition_2 PARTITION (Country = 'US', Age = 22) SELECT  userid,Gender from dynamic_partition_1 WHERE  Country = 'US' AND Age = '22'; 
+        
+select * from dynamic_partition_2;
+
+drop table dynamic_partition_1;
+drop table dynamic_partition_2;
+
+
+#-----------------------------------
+#External STATIC Partitioned tables:
+#-----------------------------------
+
+DROP TABLE employees;
+
+CREATE External TABLE employees (
+name  STRING,
+salary  FLOAT,
+subordinates ARRAY<STRING>,
+deductions  MAP<STRING, FLOAT>,
+address  STRUCT<street:STRING, city:STRING, state:STRING, zip:INT>
+)
+PARTITIONED BY (country STRING, state STRING)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '|'
+COLLECTION ITEMS TERMINATED BY '!'
+MAP KEYS TERMINATED BY '#'
+LINES TERMINATED BY '\n'
+STORED AS TEXTFILE;
+
+
+LOAD DATA LOCAL INPATH '/home/cloudera/Desktop/chapter2_partition.txt' INTO TABLE employees PARTITION (country = 'US', state = 'IL');
+
+LOAD DATA LOCAL INPATH '/user/cloudera/chapter2_partition.txt' INTO TABLE employees PARTITION (country = 'US', state = 'IL');
+
+Select * from employees;
+#ERROR: ALTER TABLE employees PARTITION (country = 'US', state = 'MA') SET LOCATION '/home/cloudera/Desktop/chapter2_partition.txt' 
+alter table add partition 
+
+#------------------------------------
+#External Dynamic Partitioned tables:
+#-------------------------------------
+
+CREATE External TABLE IF NOT EXISTS dynamic_partition_1 (
+userid INT COMMENT 'USER ID',
+Gender CHAR(1) COMMENT 'User Gender',
+Age INT COMMENT 'User Age',
+COUNTRY String COMMENT 'User Country'
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '|'
+LINES TERMINATED BY '\n'
+STORED AS TEXTFILE;
+
+load data local inpath '/home/cloudera/Desktop/Chapter2_DynamicPartition.txt' into table dynamic_partition_1; 
+
+CREATE External TABLE IF NOT EXISTS dynamic_partition_2 (
+userid INT COMMENT 'USER ID',
+Gender CHAR(1) COMMENT 'User Gender'
+)
+PARTITIONED BY (country STRING, Age Int)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '|'
+LINES TERMINATED BY '\n'
+STORED AS TEXTFILE;
+
+SET hive.exec.dynamic.partition = true;
+SET hive.exec.dynamic.partition.mode = nonstrict;
+INSERT OVERWRITE TABLE dynamic_partition_2 PARTITION(Country, Age) SELECT userid,Gender,Country,age from dynamic_partition_1; 
+
+#This command also inserts value into dynamic partition table. Its less useful since it scans scans the entire table but reduces overhead upon user
+#to code the partition column at the last of select command. 
+INSERT INTO table dynamic_partition_2 PARTITION (Country = 'US', Age = 22) SELECT  userid,Gender from dynamic_partition_1 WHERE  Country = 'US' AND Age = '22'; 
+        
+select * from dynamic_partition_2;
+
+drop table dynamic_partition_1;
+drop table dynamic_partition_2;
+
+#----------------
+#Dropping Table:
+#----------------
+DROP TABLE IF EXISTS employees;
+
+#--------------------
+#Truncating the Table:
+#---------------------
+#Truncate deletes the data alone while retaining the schema of the table.
+TRUNCATE TABLE temp2;
+
+#-----------------
+Rename Table Name:
+#-----------------
+ALTER TABLE dynamic_partition_1 RENAME TO modified_name;
+
+Add Partition alone with adding data:
+CREATE External TABLE employees (
+name  STRING,
+salary  FLOAT,
+subordinates ARRAY<STRING>,
+deductions  MAP<STRING, FLOAT>,
+address  STRUCT<street:STRING, city:STRING, state:STRING, zip:INT>
+)
+PARTITIONED BY (country STRING, state STRING)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '|'
+COLLECTION ITEMS TERMINATED BY '!'
+MAP KEYS TERMINATED BY '#'
+LINES TERMINATED BY '\n'
+STORED AS TEXTFILE;
+
+ALTER TABLE employees ADD PARTITION (country = 'India' , state = "TN" ) location '/user/cloudera/Chapter2_partition.txt';
+ALTER TABLE employees ADD PARTITION (country = 'US', state = 'MA') LOCATION '/user/cloudera/Chapter2_partition.txt'
+#No data will be added. Just the metadata of table changes. Use Load command to load data.ADD PARTITION changes the table metadata, but does not load data.
+LOAD DATA LOCAL INPATH '/home/cloudera/Desktop/chapter2_partition.txt' INTO TABLE employees PARTITION (country = 'US', state = 'IL');
+SHOW PARTITIONS employees;
+
+#Truncate a partition: (Can be done only on Managed tables)
+TRUNCATE TABLE employees PARTITION (country = 'US', state = 'IL');
+
+#Rename a partition:
+ALTER TABLE employees PARTITION(country = 'India' , state = "TN" ) RENAME TO PARTITION (country = 'German' , state = "TN" );
+
+#Exchange Partition:
+ALTER TABLE source_table EXCHANGE PARTITION (country = 'India' , state = "TN" ) WITH TABLE destination_table;
+This statement lets you move the data in a partition from a table to another table that has the same schema but does not already have that partition.
+
+CREATE External TABLE new_employees (
+name  STRING,
+salary  FLOAT,
+subordinates ARRAY<STRING>,
+deductions  MAP<STRING, FLOAT>,
+address  STRUCT<street:STRING, city:STRING, state:STRING, zip:INT>
+)
+PARTITIONED BY (country STRING, state STRING)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '|'
+COLLECTION ITEMS TERMINATED BY '!'
+MAP KEYS TERMINATED BY '#'
+LINES TERMINATED BY '\n'
+STORED AS TEXTFILE;
+
+
+#Recover Partition:
+ALTER TABLE employees DROP PARTITION (country = 'india' , state = "TN" );
+ALTER TABLE employees DROP PARTITION (country = 'US' , state = "IL" );
+Hive stores a list of partitions for each table in its meta-store. If, however, new partitions are directly added to HDFS (say by using hadoop fs -put command),
+the metastore (and hence Hive) will not be aware of these partitions unless the user runs ALTER TABLE table_name ADD PARTITION commands on each of the newly 
+added partitions.which will add metadata about partitions to the Hive metastore for partitions for which such metadata doesn't already exist. In other words, 
+it will add any partitions that exist on HDFS but not in metastore to the metastore.
+
+#MSCK REPAIR TABLE employees;
+Will regain the two partitions along with data.
+
+#Drop Partitions:
+ALTER TABLE employees DROP PARTITION (country = 'india' , state = "TN" );
+ALTER TABLE employees DROP PARTITION (country = 'US' , state = "IL" );
+
+#To prevent partitions from being dropped:
+ALTER TABLE employees PARTITION(country = 'US', state = 'IL') ENABLE NO_DROP;
+ALTER TABLE employees PARTITION(country = 'US', state = 'IL') DISABLE NO_DROP;
+
+#TO prevent partitions from being queried:
+ALTER TABLE employees PARTITION(country = 'US', state = 'IL') ENABLE OFFLINE;
+ALTER TABLE employees PARTITION(country = 'US', state = 'IL') DISABLE OFFLINE;
+
+#For tables that are protected by NO DROP CASCADE, you can use the predicate IGNORE PROTECTION.
+ALTER TABLE employees DROP PARTITION (country = 'US', state = 'IL') IGNORE PROTECTION;
+
+
+#Archive a Partition:
+#These three option should be enables before using archiving 
+set hive.archive.enabled=true;
+set hive.archive.har.parentdir.settable=true;
+set har.partfile.size=1099511627776;
+
+
+#ARCHIVE can only be performed on managed tables
+ALTER TABLE employees ARCHIVE PARTITION (country = 'US' , state = 'IL' );
+ALTER TABLE employees UNARCHIVE PARTITION (country = 'US' , state = 'IL' );
+Archiving is a feature to moves a partition's files into a Hadoop Archive (HAR). Note that only the file count will be reduced; HAR does not provide any compression.
+
+#--------------------------
+#Alter commands in a Table:
+#---------------------------
+
+#Change input file-format: 
+drop table employees;
+CREATE External TABLE employees (
+name  STRING,
+salary  FLOAT,
+subordinates ARRAY<STRING>,
+deductions  MAP<STRING, FLOAT>,
+address  STRUCT<street:STRING, city:STRING, state:STRING, zip:INT>
+)
+PARTITIONED BY (country STRING, state STRING)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '|'
+COLLECTION ITEMS TERMINATED BY '!'
+MAP KEYS TERMINATED BY '#'
+LINES TERMINATED BY '\n'
+STORED AS TEXTFILE;
+LOAD DATA LOCAL INPATH '/home/cloudera/Desktop/chapter2_partition.txt' INTO TABLE employees PARTITION (country = 'US', state = 'IL');
+
+#Describe formatted employees;
+Describe formatted employees  PARTITION (country = 'US', state = 'IL');
+
+#Change file format in table:
+ALTER TABLE employees SET FILEFORMAT RCfile;
+
+#Change file-format of partition:
+ALTER TABLE employees PARTITION (country = 'US', state = 'IL') SET FILEFORMAT RCfile;
+
+#Change column name and move them:
+ALTER TABLE employees CHANGE name moved_name STRING AFTER salary; change is visible in schema, but its wont reflect in change of data(after changing the position of columns value of CONCERNED column became null)
+ALTER TABLE employees CHANGE name moved_name STRING; change is visible in schema, as it has nothing to do with data, Table is unaltered 
+ALTER TABLE employees CHANGE  moved_name name_came_last STRING last;
+ALTER TABLE employees CHANGE  name  names int; change is visible in schema,got reflect in change of data(after changing the data type of columns, value of CONCERNED column became null)
+ALTER TABLE employees CHANGE salary changed_salary float FIRST;  change is visible in schema, first column became null. data in previous salary column was there
+
+#add columns:
+ALTER TABLE employees ADD COLUMNS (dummy1 int, dummy2 int);
+
+#modify schema:
+ALTER TABLE employees REPLACE COLUMNS (dummy3 int, deductions  MAP<STRING, FLOAT>); replaces all columns except partition columns. Hive tries to match the replaced schema with previous schema, returns errors for mismatched schema, returns null to mismatched datatype and returns data to columns that matches the previous data type with new one.
+
+#alter table properties:
+ALTER TABLE table_name SET TBLPROPERTIES ('comment' = "new_comment");
+
+#----------------------------
+#Exporting Data from Table:
+#----------------------------
+drop table employees_sample;
+CREATE TABLE employees_sample (
+name  STRING,
+salary  FLOAT,
+subordinates ARRAY<STRING>,
+deductions  MAP<STRING, FLOAT>,
+address  STRUCT<street:STRING, city:STRING, state:STRING, zip:INT>
+)
+PARTITIONED BY (country STRING, state STRING)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '|'
+COLLECTION ITEMS TERMINATED BY '!'
+MAP KEYS TERMINATED BY '#'
+LINES TERMINATED BY '\n'
+STORED AS TEXTFILE;
+LOAD DATA LOCAL INPATH '/home/cloudera/Desktop/chapter2_partition.txt' INTO TABLE employees_sample PARTITION (country = 'US', state = 'IL');
+LOAD DATA LOCAL INPATH '/home/cloudera/Desktop/chapter2_partition.txt' INTO TABLE employees_sample PARTITION (country = 'US', state = 'MA');
+LOAD DATA LOCAL INPATH '/home/cloudera/Desktop/chapter2_partition.txt' INTO TABLE employees_sample PARTITION (country = 'US', state = 'CA');
+
+#Single Export:
+INSERT OVERWRITE LOCAL DIRECTORY '/home/cloudera/Desktop/Single_export' SELECT * FROM employees_sample emp WHERE emp.state = 'CA';
+
+#Multiple Export:
+FROM employees_sample emp
+INSERT OVERWRITE LOCAL DIRECTORY '/home/cloudera/Desktop/CA_export' SELECT * WHERE emp.state = 'CA'
+INSERT OVERWRITE LOCAL DIRECTORY '/home/cloudera/Desktop/MA_export' SELECT * WHERE emp.state = 'MA'
+INSERT OVERWRITE LOCAL DIRECTORY '/home/cloudera/Desktop/IL_export' SELECT * WHERE emp.state = 'IL'; 
+
+
